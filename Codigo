@@ -1,0 +1,271 @@
+import cv2
+import numpy as np
+import tkinter as tk
+from tkinter import filedialog, ttk
+from PIL import Image, ImageTk
+
+image = None
+original_image = None
+transformed_image = None
+is_full_size = True
+is_result_full_size = True
+
+def linear_transform(a, b):
+    result = a * image + b
+    return result
+
+def power_transform(p):
+    result = np.power(image, p)
+    return result
+
+def log_transform():
+    c = 255 / np.log1p(np.max(image))
+    result = c * np.log1p(image)
+    result = np.array(result, dtype=np.uint8)
+    return result
+
+
+def apply_transform():
+    global transformed_image
+    selected_option = transform_option.get()
+    
+    if selected_option == 1:
+        transformed_image = linear_transform(float(a_entry.get()), float(b_entry.get()))
+    elif selected_option == 2:
+        transformed_image = power_transform(float(p_entry.get()))
+    else:
+        transformed_image = log_transform()
+
+    if transformed_image is not None:
+        display_transformed_image()
+        calculate_statistics()
+
+
+def calculate_statistics():
+    global image, transformed_image
+    
+    if image is not None:
+        original_mean = np.mean(image)
+        original_variance = np.var(image)
+        original_stats_label.config(text=f"Dimensões Originais: {image.shape}\n"
+                                         f"Média Original: {original_mean:.2f}, Variância Original: {original_variance:.2f}")
+    else:
+        original_stats_label.config(text="Estatísticas da imagem original aqui")
+
+    if transformed_image is not None:
+        try:
+            transformed_mean = np.mean(transformed_image)
+            transformed_variance = np.var(transformed_image)
+            transformed_stats_label.config(text=f"Dimensões Transformadas: {transformed_image.shape}\n"
+                                             f"Média Transformada: {transformed_mean:.2f}, Variância Transformada: {transformed_variance:.2f}")
+        except Exception as e:
+            print(f"Erro ao calcular estatísticas da imagem transformada: {e}")
+            transformed_stats_label.config(text="Estatísticas da imagem transformada aqui")
+    else:
+        transformed_stats_label.config(text="Estatísticas da imagem transformada aqui")
+
+
+
+
+def display_transformed_image():
+    global transformed_image
+    if transformed_image is not None:
+        max_display_width = 400
+        max_display_height = 400
+        resized_transformed = resize_image(transformed_image, max_display_width, max_display_height)
+        img = Image.fromarray(resized_transformed)
+
+        # Converta a imagem para o modo RGB para evitar o aviso libpng
+        img_rgb = img.convert("RGB")
+        img_tk = ImageTk.PhotoImage(img_rgb)
+        
+        result_label.config(image=img_tk)
+        result_label.image = img_tk
+        result_label.bind("<Button-1>", toggle_result_size)
+
+def open_image():
+    global image, original_image, transformed_image
+    file_path = filedialog.askopenfilename()
+    if file_path:
+        image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+        if image is None:
+            print("Erro ao carregar a imagem.")
+            return
+        original_image = image.copy()
+        transformed_image = None  # Resete transformed_image para evitar problemas
+        display_original_image()
+        calculate_statistics()
+
+def display_original_image():
+    global original_image
+    max_display_width = 400
+    max_display_height = 400
+    resized_original = resize_image(original_image, max_display_width, max_display_height)
+    img = Image.fromarray(resized_original)
+    img = ImageTk.PhotoImage(img)
+    original_label.config(image=img)
+    original_label.image = img
+    original_label.bind("<Button-1>", toggle_image_size)  # Adiciona evento de clique
+
+def resize_image(image, max_width, max_height):
+    img_height, img_width = image.shape
+    if img_width > max_width or img_height > max_height:
+        scale = min(max_width / img_width, max_height / img_height)
+        new_width = int(img_width * scale)
+        new_height = int(img_height * scale)
+        resized_image = cv2.resize(image, (new_width, new_height))
+        return resized_image
+    return image
+
+def toggle_image_size(event):
+    global original_image, is_full_size
+    if is_full_size:
+        display_resized_original()
+        is_full_size = False
+    else:
+        display_original_image()
+        is_full_size = True
+
+def display_resized_original():
+    global original_image
+    img = Image.fromarray(original_image)
+    img = ImageTk.PhotoImage(img)
+    original_label.config(image=img)
+    original_label.image = img
+
+def toggle_result_size(event):
+    global transformed_image, is_result_full_size
+    if is_result_full_size:
+        display_resized_transformed()
+        is_result_full_size = False
+    else:
+        display_transformed_image()
+        is_result_full_size = True
+
+def display_resized_transformed():
+    global transformed_image
+    img = Image.fromarray(transformed_image)
+    img = ImageTk.PhotoImage(img)
+    result_label.config(image=img)
+    result_label.image = img
+
+root = tk.Tk()
+root.configure(bg="#333")
+root.title("Transformações de Imagem")
+
+# Definindo um tema escuro
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TFrame", background="#333")
+style.configure("TLabel", background="#333", foreground="#FFF", font=("Arial", 10))
+style.configure("TRadiobutton", background="#333", foreground="#FFF", font=("Arial", 10))
+style.configure("TButton", background="#555", foreground="#FFF", font=("Arial", 10), borderwidth=0)
+style.map("TButton", background=[('pressed', '#333'), ('active', '#666')])
+
+# Espaçamentos padrões
+PAD_X = 10
+PAD_Y = 10
+
+# Frame para Opções e Parâmetros
+frame_options = tk.Frame(root)
+frame_options.grid(row=0, column=0, columnspan=5, padx=PAD_X, pady=PAD_Y, sticky='w')
+
+
+# Botão para abrir a imagem
+open_button = tk.Button(frame_options, text="Abrir Imagem", command=open_image)
+open_button.grid(row=0, column=0, padx=PAD_X, pady=PAD_Y)
+
+# Opções de transformação
+transform_option = tk.IntVar()
+transform_option.set(1)
+linear_radio = tk.Radiobutton(frame_options, text="Transformação Linear", variable=transform_option, value=1)
+power_radio = tk.Radiobutton(frame_options, text="Transformação de Potência", variable=transform_option, value=2)
+log_radio = tk.Radiobutton(frame_options, text="Transformação Logarítmica", variable=transform_option, value=3)
+linear_radio.grid(row=0, column=1, padx=PAD_X, pady=PAD_Y)
+power_radio.grid(row=0, column=2, padx=PAD_X, pady=PAD_Y)
+log_radio.grid(row=0, column=3, padx=PAD_X, pady=PAD_Y)
+
+# Entradas para parâmetros
+a_label = tk.Label(frame_options, text="a:")
+a_label.grid(row=1, column=1, padx=PAD_X, pady=PAD_Y)
+a_entry = tk.Entry(frame_options)
+a_entry.grid(row=1, column=2, padx=PAD_X, pady=PAD_Y)
+
+b_label = tk.Label(frame_options, text="b:")
+b_label.grid(row=2, column=1, padx=PAD_X, pady=PAD_Y)
+b_entry = tk.Entry(frame_options)
+b_entry.grid(row=2, column=2, padx=PAD_X, pady=PAD_Y)
+
+p_label = tk.Label(frame_options, text="p:")
+p_label.grid(row=3, column=1, padx=PAD_X, pady=PAD_Y)
+p_entry = tk.Entry(frame_options)
+p_entry.grid(row=3, column=2, padx=PAD_X, pady=PAD_Y)
+
+# Botão para aplicar a transformação
+apply_button = tk.Button(frame_options, text="Aplicar Transformação", command=apply_transform)
+apply_button.grid(row=4, column=1, columnspan=3, padx=PAD_X, pady=PAD_Y)
+
+# Rótulo da imagem original
+original_label = tk.Label(root)
+original_label.grid(row=1, column=0, padx=PAD_X, pady=PAD_Y, rowspan=4, sticky='w')
+
+# Rótulo para indicar a imagem original diretamente abaixo da imagem
+original_image_label = tk.Label(root, text="Imagem Original")
+original_image_label.grid(row=5, column=0, padx=PAD_X, pady=PAD_Y, sticky='w')
+
+# Estatísticas da imagem original
+original_stats_label = tk.Label(root, text="Estatísticas da imagem original aqui")
+original_stats_label.grid(row=6, column=0, padx=PAD_X, pady=PAD_Y, sticky='w')
+
+# Rótulo da imagem transformada
+result_label = tk.Label(root)
+result_label.grid(row=1, column=1, padx=PAD_X, pady=PAD_Y, rowspan=4)
+
+# Rótulo para indicar a imagem transformada diretamente abaixo da imagem
+transformed_image_label = tk.Label(root, text="Imagem Transformada")
+transformed_image_label.grid(row=5, column=1, padx=PAD_X, pady=PAD_Y, sticky='w')
+
+# Estatísticas da imagem transformada
+transformed_stats_label = tk.Label(root, text="Estatísticas da imagem transformada aqui")
+transformed_stats_label.grid(row=6, column=1, padx=PAD_X, pady=PAD_Y, sticky='w')
+
+# Alterando a cor de fundo dos widgets padrão do tkinter
+frame_options.config(bg="#333")
+open_button.config(bg="#555", fg="#FFF", font=("Arial", 10))
+linear_radio.config(bg="#333", fg="#FFF", font=("Arial", 10))
+power_radio.config(bg="#333", fg="#FFF", font=("Arial", 10))
+log_radio.config(bg="#333", fg="#FFF", font=("Arial", 10))
+a_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+b_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+p_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+apply_button.config(bg="#555", fg="#FFF", font=("Arial", 10))
+original_label.config(bg="#333")
+original_image_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+original_stats_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+result_label.config(bg="#333")
+
+transformed_image_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+transformed_stats_label.config(bg="#333", fg="#FFF", font=("Arial", 10))
+
+# Modificamos a função de estatísticas para atualizar os dois labels de estatísticas separadamente
+def calculate_statistics():
+    global image, transformed_image
+    original_mean = np.mean(image)
+    original_variance = np.var(image)
+    transformed_mean = np.mean(transformed_image)
+    transformed_variance = np.var(transformed_image)
+
+    original_stats_label.config(text=f"Dimensões Originais: {image.shape}\n"
+                                     f"Média Original: {original_mean:.2f}, Variância Original: {original_variance:.2f}")
+    
+    transformed_stats_label.config(text=f"Dimensões Transformadas: {transformed_image.shape}\n"
+                                        f"Média Transformada: {transformed_mean:.2f}, Variância Transformada: {transformed_variance:.2f}")
+
+# Variáveis
+image = None
+original_image = None
+transformed_image = None
+is_full_size = True
+is_result_full_size = True
+
+root.mainloop()
